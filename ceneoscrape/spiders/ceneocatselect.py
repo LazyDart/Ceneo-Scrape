@@ -6,7 +6,7 @@ class CeneocatselectSpider(scrapy.Spider):
     name = "ceneocatselect"
     allowed_domains = ["www.ceneo.pl"]
     start_urls = ["https://www.ceneo.pl/"]
-    custom_settings = {'CLOSESPIDER_PAGECOUNT': 30}
+    custom_settings = {'CLOSESPIDER_PAGECOUNT': 50, 'DOWNLOAD_DELAY': 0.25}
 
     offer_refs = set()
     data_gathered = []
@@ -18,7 +18,7 @@ class CeneocatselectSpider(scrapy.Spider):
         cat_titles = [selector.get() for selector in cats.css("a::text")]
 
         cat_dict = {(cat_titles[i], cat_links[i]) for i in range(len(cats))}
-        for i in range(len(cat_links)):    
+        for i in range(len(cat_links[0:2])):    
             current_cat = self.start_urls[0] + cat_links[i]
 
             yield response.follow(current_cat, callback=self.parse_category)
@@ -66,7 +66,7 @@ class CeneocatselectSpider(scrapy.Spider):
 
 
                         if offer_ref not in self.offer_refs:
-                            offer_link = r"https://www.ceneo.pl/" + offer_link 
+                            offer_link = r"https://www.ceneo.pl/" + offer_ref + "#tab=reviews_scroll" 
                             # offer_dict[offer_title] = offer_link
 
                             self.offer_refs.add(offer_ref)
@@ -100,7 +100,7 @@ class CeneocatselectSpider(scrapy.Spider):
         score_percents = score_percents[:len(score_percents)//2]
         score_dict = {int(score.css("span.score-extend__number::text").get()): float(score.css("span.score-extend__percent::text").get()[:-1])/100 for score in score_percents}
 
-        if score_dict[2] + score_dict[1] == 0:
+        if score_dict[2] + score_dict[1] < 0.01:
             reviews = response.css("div.user-post.user-post__card.js_product-review")[:3]
             #             entry_ids = [selector.css("a.link.link--accent.user-post__abuse.js_report-product-review-abuse").attrib["data-review-id"] for selector in reviews]
             
@@ -119,13 +119,40 @@ class CeneocatselectSpider(scrapy.Spider):
                 scores.append(review.css("div.user-post__content")[0].css("span.user-post__score-count::text").get())
 
             print(entry_ids, [text[:10] for text in review_text], len(scores), response.request.url)
-        
+        else:
+            yield response.follow(sub("#*tab=reviews_scroll", ";0162-0", str(response.request.url)), callback=self.parse_pos_or_neg)
+
+            yield response.follow(sub("#*tab=reviews_scroll", ";0162-1", str(response.request.url)), callback=self.parse_pos_or_neg)
+
+
         # else:
         #     pass
 
 
         pass
 
+    def parse_pos_or_neg(self, response):
+        reviews = response.css("div.user-post.user-post__card.js_product-review")[:10]
+            #             entry_ids = [selector.css("a.link.link--accent.user-post__abuse.js_report-product-review-abuse").attrib["data-review-id"] for selector in reviews]
+
+        entry_ids = []
+        review_text = []
+        scores = []
+        for review in reviews:
+        # Entry ID
+            entry_ids.append(review.attrib["data-entry-id"])
+        
+        # reviews = reviews.css("div.user-post__content")[::2]
+        # Review Text
+            review_text.append(review.css("div.user-post__content")[0].css("div.user-post__text::text").get())
+
+        # Score
+            scores.append(review.css("div.user-post__content")[0].css("span.user-post__score-count::text").get())
+
+        # TODO Add score filtering if ;0162-0 only score <= 2 if ;0162-1 only score >= 4
+        print("HOOOLY XDDDDDD\n",entry_ids, [text[:10] for text in review_text], len(scores), response.request.url)
+        
+        
 #TODO
 # add #tab=reviews_scroll
 # or ;0162-0 <- negative and ;0162-1 <- positive
