@@ -1,5 +1,5 @@
 import scrapy
-from re import sub, match
+from re import sub, match, search
 from functools import partial
 
 class CeneocatselectSpider(scrapy.Spider):
@@ -22,6 +22,10 @@ class CeneocatselectSpider(scrapy.Spider):
             current_cat = self.start_urls[0] + cat_links[i]
 
             yield response.follow(current_cat, callback=self.parse_category)
+
+
+        print(self.offer_refs)
+        print(len(self.data_gathered), self.data_gathered[:10])
 
         pass
 
@@ -116,22 +120,24 @@ class CeneocatselectSpider(scrapy.Spider):
                 review_text.append(review.css("div.user-post__content")[0].css("div.user-post__text::text").get())
 
             # Score
-                scores.append(review.css("div.user-post__content")[0].css("span.user-post__score-count::text").get())
+                current_score = review.css("div.user-post__content")[0].css("span.user-post__score-count::text").get()
+                score_match = search("[0-9\.]/", current_score)
+                current_score = current_score[score_match.span()[0]:score_match.span()[1]-1]
+                scores.append(float(current_score))
 
-            print(entry_ids, [text[:10] for text in review_text], len(scores), response.request.url)
+            self.data_gathered += [[entry_ids[i], scores[i], review_text[i][:15]] for i in range(len(entry_ids)) if (scores[i] >= 4) or (scores[i] <= 2)]
+
         else:
-            yield response.follow(sub("#*tab=reviews_scroll", ";0162-0", str(response.request.url)), callback=self.parse_pos_or_neg)
+            pos = partial(self.parse_review, positive=True)
+            neg = partial(self.parse_review, positive=False)
+            yield response.follow(sub("#*tab=reviews_scroll", ";0162-0", str(response.request.url)), callback=pos)
 
-            yield response.follow(sub("#*tab=reviews_scroll", ";0162-1", str(response.request.url)), callback=self.parse_pos_or_neg)
-
-
-        # else:
-        #     pass
+            yield response.follow(sub("#*tab=reviews_scroll", ";0162-1", str(response.request.url)), callback=neg)
 
 
         pass
 
-    def parse_pos_or_neg(self, response):
+    def parse_review(self, response, positive=False):
         reviews = response.css("div.user-post.user-post__card.js_product-review")[:10]
             #             entry_ids = [selector.css("a.link.link--accent.user-post__abuse.js_report-product-review-abuse").attrib["data-review-id"] for selector in reviews]
 
@@ -147,10 +153,14 @@ class CeneocatselectSpider(scrapy.Spider):
             review_text.append(review.css("div.user-post__content")[0].css("div.user-post__text::text").get())
 
         # Score
-            scores.append(review.css("div.user-post__content")[0].css("span.user-post__score-count::text").get())
-
-        # TODO Add score filtering if ;0162-0 only score <= 2 if ;0162-1 only score >= 4
-        print("HOOOLY XDDDDDD\n",entry_ids, [text[:10] for text in review_text], len(scores), response.request.url)
+            current_score = review.css("div.user-post__content")[0].css("span.user-post__score-count::text").get()
+            score_match = search("[0-9\.]/", current_score)
+            current_score = current_score[score_match.span()[0]:score_match.span()[1]-1]
+            scores.append(float(current_score))
+        
+        self.data_gathered += [[entry_ids[i], scores[i], review_text[i][:15]] for i in range(len(entry_ids)) if (scores[i] >= 4 and positive) or (scores[i] <= 2 and not positive)]
+        # # TODO Add score filtering if ;0162-0 only score <= 2 if ;0162-1 only score >= 4
+        # print(entry_ids, [text[:10] for text in review_text], len(scores), response.request.url)
         
         
 #TODO
