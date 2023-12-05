@@ -23,10 +23,6 @@ class CeneocatselectSpider(scrapy.Spider):
 
             yield response.follow(current_cat, callback=self.parse_category)
 
-
-        print(self.offer_refs)
-        print(len(self.data_gathered), self.data_gathered[:10])
-
         pass
 
     def parse_category(self, response):
@@ -38,41 +34,24 @@ class CeneocatselectSpider(scrapy.Spider):
         offer_dict = {}
 
         for offer in offers:
-            # Exclude /Click/Offer    https://redirect.ceneo.pl/offers/
+            
             try:
                 offer_link = offer.css("a.product-reviews-link.link.link--accent.js_reviews-link.js_clickHash.js_seoUrl").attrib["href"]
-                # offer_link = offer.css("span a").attrib["href"]
-
-            # offer_score = float(sub("[\n]", "", sub(",", ".", offer.css("span.product-score::text").get())))
 
                 if ("reviews_scroll" in offer_link) and (float(sub("[\n]", "", sub(",", ".", offer.css("span.product-score::text").get()))) < 5):
-
-                    # if len(offer.css(".cat-prod-row__name").css("span:not([class=label])::text").get()) == 2:
-                    #     offer_title = offer.css(".cat-prod-row__name").css("span:not([class=label])::text")[1].get()
-                    # else:
-                    #     offer_title = offer.css(".cat-prod-row__name").css("span:not([class=label])::text").get()
                     
-                # [offer.get() for offer in  offers.css("span a")]
-                
-                # [offer.css("::text").get() for offer in response.css("a.product-reviews-link.link.link--accent.js_reviews-link.js_clickHash.js_seoUrl")]
-                # [offer.attrib["href"] for offer in response.css("a.product-reviews-link.link.link--accent.js_reviews-link.js_clickHash.js_seoUrl")]
-                
-                    # TODO if Reviews > 1
                     if (r"/Click/Offer" not in offer_link) and (r"https://redirect.ceneo.pl/offers/" not in offer_link):
                         
 
                         limit = int(sub("[^0-9]*", "", offer.css("a.product-reviews-link.link.link--accent.js_reviews-link.js_clickHash.js_seoUrl::text").get()))
-                        # print(offer_title, sub("#*tab=reviews_scroll", ";0162-0", offer_link))
-                        # print(offer_title, offer_link)
-
+                        
                         link_ref_match = match("/[0-9]*", offer_link)
                         offer_ref = offer_link[link_ref_match.span()[0]+1:link_ref_match.span()[1]]
 
 
                         if offer_ref not in self.offer_refs:
                             offer_link = r"https://www.ceneo.pl/" + offer_ref + "#tab=reviews_scroll" 
-                            # offer_dict[offer_title] = offer_link
-
+                            
                             self.offer_refs.add(offer_ref)
 
                             parse_func = partial(self.parse_offer, limit=max(20, limit))
@@ -81,23 +60,14 @@ class CeneocatselectSpider(scrapy.Spider):
 
             except KeyError:
                 print("Passed")
-
-                # offer_titles = [selector.get() for selector in offers.css("span:not([class])::text")]
-            # offer_links = [selector.css("a").attrib["href"] for selector in offers]
-            
-            # offer_dict = {(offer_titles[i], offer_links[i]) for i in range(len(offers))}
-
             
 
     def parse_offer(self, response, limit=20):
-        # 1: Document Offer Name
-        # 2: Document reviews and their entry id
         # 3: Pick Balanced number of reviews
 
         # TODO Balanced seek version.
         # Data Storing and saving.
         
-
         total_reviews = int(sub("[^0-9]", "", response.css("div.score-extend__review::text")[0].get()))
 
         score_percents = response.css("div.js_score-popup-filter-link.score-extend__row")
@@ -106,7 +76,6 @@ class CeneocatselectSpider(scrapy.Spider):
 
         if score_dict[2] + score_dict[1] < 0.01:
             reviews = response.css("div.user-post.user-post__card.js_product-review")[:3]
-            #             entry_ids = [selector.css("a.link.link--accent.user-post__abuse.js_report-product-review-abuse").attrib["data-review-id"] for selector in reviews]
             
             entry_ids = []
             review_text = []
@@ -115,7 +84,6 @@ class CeneocatselectSpider(scrapy.Spider):
             # Entry ID
                 entry_ids.append(review.attrib["data-entry-id"])
             
-            # reviews = reviews.css("div.user-post__content")[::2]
             # Review Text
                 review_text.append(review.css("div.user-post__content")[0].css("div.user-post__text::text").get())
 
@@ -139,8 +107,7 @@ class CeneocatselectSpider(scrapy.Spider):
 
     def parse_review(self, response, positive=False):
         reviews = response.css("div.user-post.user-post__card.js_product-review")[:10]
-            #             entry_ids = [selector.css("a.link.link--accent.user-post__abuse.js_report-product-review-abuse").attrib["data-review-id"] for selector in reviews]
-
+        
         entry_ids = []
         review_text = []
         scores = []
@@ -159,10 +126,4 @@ class CeneocatselectSpider(scrapy.Spider):
             scores.append(float(current_score))
         
         self.data_gathered += [[entry_ids[i], scores[i], review_text[i][:15]] for i in range(len(entry_ids)) if (scores[i] >= 4 and positive) or (scores[i] <= 2 and not positive)]
-        # # TODO Add score filtering if ;0162-0 only score <= 2 if ;0162-1 only score >= 4
-        # print(entry_ids, [text[:10] for text in review_text], len(scores), response.request.url)
         
-        
-#TODO
-# add #tab=reviews_scroll
-# or ;0162-0 <- negative and ;0162-1 <- positive
