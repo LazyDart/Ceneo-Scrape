@@ -7,6 +7,8 @@ import scrapy
 
 
 class CeneoscrapeItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+    entry_id = scrapy.Field()  # Entry ID of a Review
+    review_text = scrapy.Field()  # Text of a Review 
+    score = scrapy.Field()  # Score of a review (0-2) Pos or (4-5) Neg
+    offer_ref = scrapy.Field()  # Ref name of an Offer
+    

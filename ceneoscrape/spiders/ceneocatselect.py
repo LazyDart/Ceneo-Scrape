@@ -1,6 +1,8 @@
 import scrapy
 from re import sub, match, search
 from functools import partial
+from ceneoscrape.items import CeneoscrapeItem
+
 
 class CeneocatselectSpider(scrapy.Spider):
     name = "ceneocatselect"
@@ -9,12 +11,12 @@ class CeneocatselectSpider(scrapy.Spider):
     custom_settings = {'CLOSESPIDER_PAGECOUNT': 50, 'DOWNLOAD_DELAY': 0.25}
 
     offer_refs = set()
-    data_gathered = []
-
 
     def parse(self, response):
         cats = response.css(".pop-cat-item")
         cat_links = [selector.attrib["href"] for selector in cats]
+
+        # Category item??
         cat_titles = [selector.get() for selector in cats.css("a::text")]
 
         cat_dict = {(cat_titles[i], cat_links[i]) for i in range(len(cats))}
@@ -33,6 +35,7 @@ class CeneocatselectSpider(scrapy.Spider):
 
         offer_dict = {}
 
+        # Offer ITEM?
         for offer in offers:
             
             try:
@@ -77,23 +80,36 @@ class CeneocatselectSpider(scrapy.Spider):
         if score_dict[2] + score_dict[1] < 0.01:
             reviews = response.css("div.user-post.user-post__card.js_product-review")[:3]
             
-            entry_ids = []
-            review_text = []
-            scores = []
-            for review in reviews:
-            # Entry ID
-                entry_ids.append(review.attrib["data-entry-id"])
-            
-            # Review Text
-                review_text.append(review.css("div.user-post__content")[0].css("div.user-post__text::text").get())
 
-            # Score
+            # TODO get it into a serializer
+            url_match = search("/[0-9]+[;#]", response.request.url)
+            current_offer_refname = response.request.url[url_match.span()[0]+1:url_match.span()[1]-1]
+
+
+            for review in reviews:
+                
+                # TODO get it into a serializer
                 current_score = review.css("div.user-post__content")[0].css("span.user-post__score-count::text").get()
                 score_match = search("[0-9\.]/", current_score)
                 current_score = current_score[score_match.span()[0]:score_match.span()[1]-1]
-                scores.append(float(current_score))
+                current_score = float(current_score)
 
-            self.data_gathered += [[entry_ids[i], scores[i], review_text[i][:15]] for i in range(len(entry_ids)) if (scores[i] >= 4) or (scores[i] <= 2)]
+                if (current_score >= 4) or (current_score <= 2):
+
+                    offer_data = CeneoscrapeItem()
+
+                    # Offer refname
+                    offer_data["offer_ref"] = current_offer_refname
+                
+                    # Entry ID
+                    offer_data["entry_id"] = review.attrib["data-entry-id"]
+                
+                    # Review Text
+                    offer_data["review_text"] = review.css("div.user-post__content")[0].css("div.user-post__text::text").get()
+
+                    offer_data["score"] = current_score
+
+                    yield offer_data
 
         else:
             pos = partial(self.parse_review, positive=True)
@@ -106,24 +122,38 @@ class CeneocatselectSpider(scrapy.Spider):
         pass
 
     def parse_review(self, response, positive=False):
+        # TODO filtering pos/neg
+
         reviews = response.css("div.user-post.user-post__card.js_product-review")[:10]
         
-        entry_ids = []
-        review_text = []
-        scores = []
-        for review in reviews:
-        # Entry ID
-            entry_ids.append(review.attrib["data-entry-id"])
+        # TODO get it into a serializer
+        url_match = search("/[0-9]+[;#]", response.request.url)
+        current_offer_refname = response.request.url[url_match.span()[0]+1:url_match.span()[1]-1]
         
-        # reviews = reviews.css("div.user-post__content")[::2]
-        # Review Text
-            review_text.append(review.css("div.user-post__content")[0].css("div.user-post__text::text").get())
-
-        # Score
+        for review in reviews:
+            
+            # TODO get it into a serializer
             current_score = review.css("div.user-post__content")[0].css("span.user-post__score-count::text").get()
             score_match = search("[0-9\.]/", current_score)
             current_score = current_score[score_match.span()[0]:score_match.span()[1]-1]
-            scores.append(float(current_score))
+            current_score = float(current_score)
+
+            if (positive and current_score >= 4) or (not positive and current_score <= 2):
+
+                offer_data = CeneoscrapeItem()
+
+                # Offer refname
+                offer_data["offer_ref"] = current_offer_refname
+            
+                # Entry ID
+                offer_data["entry_id"] = review.attrib["data-entry-id"]
+            
+                # Review Text
+                offer_data["review_text"] = review.css("div.user-post__content")[0].css("div.user-post__text::text").get()
+
+                offer_data["score"] = current_score
+
+                yield offer_data
         
-        self.data_gathered += [[entry_ids[i], scores[i], review_text[i][:15]] for i in range(len(entry_ids)) if (scores[i] >= 4 and positive) or (scores[i] <= 2 and not positive)]
+        # self.data_gathered += [[entry_ids[i], scores[i], review_text[i][:15]] for i in range(len(entry_ids)) if (scores[i] >= 4 and positive) or (scores[i] <= 2 and not positive)]
         
