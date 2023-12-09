@@ -1,0 +1,4 @@
+# Ignore data filetypes
+*.csv
+*.json
+*.pkl
