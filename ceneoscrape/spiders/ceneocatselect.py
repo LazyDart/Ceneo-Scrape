@@ -59,11 +59,16 @@ class CeneocatselectSpider(scrapy.Spider):
 
                             parse_func = partial(self.parse_offer, limit=max(20, limit))
                             
+                            print("Would parse:", offer_link)
                             yield response.follow(offer_link, callback=parse_func)
 
             except KeyError:
                 print("Passed")
-            
+
+        next_page = response.css("a.pagination__item.pagination__next")
+        if next_page:
+            print("GOING TO THE NEXT PAGE")
+            yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=self.parse_category)
 
     def parse_offer(self, response, limit=20):
         # 3: Pick Balanced number of reviews
