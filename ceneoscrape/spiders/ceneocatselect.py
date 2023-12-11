@@ -1,5 +1,10 @@
-import scrapy
+import os
+import csv
+
 from re import sub, match, search
+
+import scrapy
+
 from functools import partial
 from ceneoscrape.items import CeneoscrapeItem
 
@@ -9,8 +14,19 @@ class CeneocatselectSpider(scrapy.Spider):
     allowed_domains = ["www.ceneo.pl"]
     start_urls = ["https://www.ceneo.pl/"]
     custom_settings = {'CLOSESPIDER_PAGECOUNT': 50, 'DOWNLOAD_DELAY': 0.25}
-
     offer_refs = set()
+    entry_ids = set()    
+
+    # TODO MAKE IT MORE CLASS Like??
+    os.chdir(os.path.dirname(__file__))
+
+    if "output.csv" in os.listdir("./"):
+        file = open("output.csv")
+        olderdata = csv.reader(file)
+        for row in olderdata:
+            entry_ids.add(row[0])
+            offer_refs.add(row[1])
+        file.close()
 
     def parse(self, response):
         cats = response.css(".pop-cat-item")
@@ -100,7 +116,7 @@ class CeneocatselectSpider(scrapy.Spider):
                 current_score = current_score[score_match.span()[0]:score_match.span()[1]-1]
                 current_score = float(current_score)
 
-                if (current_score >= 4) or (current_score <= 2):
+                if ((current_score >= 4) or (current_score <= 2)) and (review.attrib["data-entry-id"] not in self.entry_ids):
 
                     offer_data = CeneoscrapeItem()
 
@@ -114,7 +130,7 @@ class CeneocatselectSpider(scrapy.Spider):
                     offer_data["review_text"] = review.css("div.user-post__content")[0].css("div.user-post__text::text").get()
 
                     offer_data["score"] = current_score
-
+                
                     yield offer_data
 
         else:
@@ -144,7 +160,7 @@ class CeneocatselectSpider(scrapy.Spider):
             current_score = current_score[score_match.span()[0]:score_match.span()[1]-1]
             current_score = float(current_score)
 
-            if (positive and current_score >= 4) or (not positive and current_score <= 2):
+            if ((positive and current_score >= 4) or (not positive and current_score <= 2)) and (review.attrib["data-entry-id"] not in self.entry_ids):
 
                 offer_data = CeneoscrapeItem()
 
