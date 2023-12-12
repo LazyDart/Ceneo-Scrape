@@ -99,7 +99,14 @@ class CeneocatselectSpider(scrapy.Spider):
         score_percents = score_percents[:len(score_percents)//2]
         score_dict = {int(score.css("span.score-extend__number::text").get()): float(score.css("span.score-extend__percent::text").get()[:-1])/100 for score in score_percents}
 
-        if score_dict[2] + score_dict[1] < 0.01:
+        if score_dict[2] + score_dict[1] > 0:
+            pos = partial(self.parse_review, positive=True)
+            neg = partial(self.parse_review, positive=False)
+            yield response.follow(sub("#*tab=reviews_scroll", ";0162-0", str(response.request.url)), callback=neg)
+
+            yield response.follow(sub("#*tab=reviews_scroll", ";0162-1", str(response.request.url)), callback=pos)
+            
+        else:
             pass
             # reviews = response.css("div.user-post.user-post__card.js_product-review")[:3]
             
@@ -134,12 +141,6 @@ class CeneocatselectSpider(scrapy.Spider):
                 
             #         yield offer_data
 
-        else:
-            pos = partial(self.parse_review, positive=True)
-            neg = partial(self.parse_review, positive=False)
-            yield response.follow(sub("#*tab=reviews_scroll", ";0162-0", str(response.request.url)), callback=pos)
-
-            yield response.follow(sub("#*tab=reviews_scroll", ";0162-1", str(response.request.url)), callback=neg)
 
 
         pass
