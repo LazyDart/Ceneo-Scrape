@@ -112,8 +112,8 @@ class CeneocatselectSpider(scrapy.Spider):
                 
                 # TODO get it into a serializer
                 current_score = review.css("div.user-post__content")[0].css("span.user-post__score-count::text").get()
-                score_match = search("[0-9\.]/", current_score)
-                current_score = current_score[score_match.span()[0]:score_match.span()[1]-1]
+                score_match = search("[0-9\,.]/", current_score)
+                current_score = sub(",", ".", current_score[score_match.span()[0]:score_match.span()[1]-1])
                 current_score = float(current_score)
 
                 if ((current_score >= 4) or (current_score <= 2)) and (review.attrib["data-entry-id"] not in self.entry_ids):
@@ -127,7 +127,7 @@ class CeneocatselectSpider(scrapy.Spider):
                     offer_data["entry_id"] = review.attrib["data-entry-id"]
                 
                     # Review Text
-                    offer_data["review_text"] = review.css("div.user-post__content")[0].css("div.user-post__text::text").get()
+                    offer_data["review_text"] = " ".join(review.css("div.user-post__content")[0].css("div.user-post__text::text").getall())
 
                     offer_data["score"] = current_score
                 
