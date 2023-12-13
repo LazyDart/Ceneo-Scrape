@@ -13,7 +13,7 @@ class CeneocatselectSpider(scrapy.Spider):
     name = "ceneocatselect"
     allowed_domains = ["www.ceneo.pl"]
     start_urls = ["https://www.ceneo.pl/"]
-    custom_settings = {'CLOSESPIDER_PAGECOUNT': 1000, 'DOWNLOAD_DELAY': 1}
+    custom_settings = {'CLOSESPIDER_PAGECOUNT': 20, 'DOWNLOAD_DELAY': 1}
     offer_refs = set()
     entry_ids = set()    
 
@@ -148,6 +148,14 @@ class CeneocatselectSpider(scrapy.Spider):
     def parse_review(self, response, positive=False):
         # TODO filtering pos/neg
 
+        product_title = response.css("div.product-top__title h1::text").get()
+
+        full_product_category = response.css("nav.js_breadcrumbs.breadcrumbs").css("a.js_breadcrumbs__item.breadcrumbs__item.link span::text").getall()
+
+        top_product_category = full_product_category[-1]
+
+        full_product_category = "/".join(full_product_category[1:])
+
         reviews = response.css("div.user-post.user-post__card.js_product-review")[:10]
         
         # TODO get it into a serializer
@@ -175,7 +183,18 @@ class CeneocatselectSpider(scrapy.Spider):
                 # Review Text
                 offer_data["review_text"] = " ".join(review.css("div.user-post__content")[0].css("div.user-post__text::text").getall())
 
+                # Score
                 offer_data["score"] = current_score
+
+                # Extract Dates
+                datetimes = reviews.css("div.user-post__content span.user-post__published time")
+
+                offer_data["entry_date"] = datetimes[0].attrib["datetime"]
+                offer_data["purchase_date"] = datetimes[1].attrib["datetime"]
+
+                offer_data["product_title"] = product_title
+                offer_data["full_category"] = full_product_category
+                offer_data["top_category"] = top_product_category
 
                 yield offer_data
         
