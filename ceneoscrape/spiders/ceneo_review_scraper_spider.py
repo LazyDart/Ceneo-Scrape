@@ -54,7 +54,8 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         categories = response.css(".pop-cat-item")
         category_links = [selector.attrib["href"] for selector in categories]
 
-        for i in range(len(category_links[8:20])):
+        # TODO CLOTHES AND JEWELRLY REQUIRE SPECIAL CARE!
+        for i in range(len(category_links[0:9])):
             # Get full link to a page by concatenating starting url with single category_link. 
             current_category = self.start_urls[0] + category_links[i]
 
@@ -82,6 +83,8 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         for offer in offers:
             
             try:
+                
+                # TODO NO REVIEW OFFERS ARE HERE FOR SOME REASON
                 # Review Link - Key Error happens at .attrib["href"]
                 offer_link = offer.css("a.product-reviews-link.link.link--accent.js_reviews-link.js_clickHash.js_seoUrl").attrib["href"]
 
@@ -95,14 +98,14 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                     # limit = int(sub("[^0-9]*", "", offer.css("a.product-reviews-link.link.link--accent.js_reviews-link.js_clickHash.js_seoUrl::text").get()))
                     
                     # Extract offer_ref from link.
-                    link_ref_match = match("/[0-9]*", offer_link)
+                    link_ref_match = match("/[0-9]+", offer_link)
                     offer_ref = offer_link[link_ref_match.span()[0]+1:link_ref_match.span()[1]]
 
                     # If offer_ref wasn't found in previous scrapes then open offer site.
-                    if offer_ref not in self.offer_refs:
+                    if offer_ref not in self.offer_refs: 
                         # TODO Skip #tab=reviews_scroll step and use ;0162-0 from the beginning.;
                         
-                        offer_link = r"https://www.ceneo.pl/" + offer_ref[:-1] + ";0162-0"
+                        offer_link = r"https://www.ceneo.pl/" + offer_ref + ";0162-0"
                         self.offer_refs.add(offer_ref)
 
                         print(offer_link)
