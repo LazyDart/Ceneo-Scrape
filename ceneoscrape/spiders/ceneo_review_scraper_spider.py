@@ -13,7 +13,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
     name = "ceneocatselect"
     allowed_domains = ["www.ceneo.pl"]
     start_urls = ["https://www.ceneo.pl/"]
-    custom_settings = {'CLOSESPIDER_PAGECOUNT': 20, 'DOWNLOAD_DELAY': 0.5}
+    custom_settings = {'CLOSESPIDER_PAGECOUNT': 80, 'DOWNLOAD_DELAY': 0.5}
 
     # TODO MAKE IT MORE CLASS Like??
     # After Initialization Load all previously saved data id's
@@ -55,9 +55,9 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         category_links = [selector.attrib["href"] for selector in categories]
 
         # TODO CLOTHES AND JEWELRLY REQUIRE SPECIAL CARE!
-        for i in range(len(category_links[0:9])):
+        for i in range(12, 12 + len(category_links[0:1])):
             # Get full link to a page by concatenating starting url with single category_link. 
-            current_category = self.start_urls[0] + category_links[i]
+            current_category = self.start_urls[0] + "/Karmy_dla_psow"# category_links[i]
 
             # Follow to a Second Parsing Function.
             yield response.follow(current_category, callback=self.parse_category)
@@ -143,8 +143,6 @@ class CeneoReviewScraperSpider(scrapy.Spider):
 
         # If percentage of negative values is greater than 0 then follow up and scrape reviews.
         if score_dict[2] + score_dict[1] > 0:
-            
-            negatives_scraped = 0
 
             positive = False
 
@@ -159,9 +157,11 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             reviews = response.css("div.user-post.user-post__card.js_product-review")[:10]
             
             # TODO get it into a serializer
-            url_match = search("/[0-9]+[;#]", response.request.url)
-            current_offer_refname = response.request.url[url_match.span()[0]+1:url_match.span()[1]-1]
+            url_match = search("/[0-9]{2,}", response.request.url)
+            current_offer_refname = response.request.url[url_match.span()[0]+1:url_match.span()[1]]
             
+            negatives_scraped = 0
+
             for review in reviews:
                 
                 # Extract and Format score given by each reviewer. Stop scraping if review has ambiguous score (3)
@@ -203,55 +203,24 @@ class CeneoReviewScraperSpider(scrapy.Spider):
 
                     negatives_scraped += 1
                     yield offer_data
-            
-            
+
+            next_page = response.css("a.pagination__item.pagination__next")
+
+            if (negatives_scraped == 10) and (len(next_page) > 0):
+
+                neg = partial(self.parse_review, positive=False, scraped_this_mode=10)
+
+                yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=neg)
+
+            else:
             # Create two ways of scraping: Focused on negative and on positive cases
-            pos = partial(self.parse_review, positive=True)
+                pos = partial(self.parse_review, positive=True, limit = negatives_scraped + 2)
 
-            # neg = partial(self.parse_review, positive=False)
-
-            # Call those case-specific functions on offer-sites sorted by positive/negative reviews ";0162-0"
-            # yield response.follow(sub("#*tab=reviews_scroll", ";0162-0", str(response.request.url)), callback=neg)
-
-            yield response.follow(sub("#*tab=reviews_scroll", ";0162-1", str(response.request.url)), callback=pos)
             
-        else:
-            pass
-            # TODO if this case is used in anyway, then categories and titles also have to be included here.
-            # reviews = response.css("div.user-post.user-post__card.js_product-review")[:3]
+                yield response.follow(sub(";0162-0", ";0162-1", str(response.request.url)), callback=pos)
             
 
-            # # TODO get it into a serializer
-            # url_match = search("/[0-9]+[;#]", response.request.url)
-            # current_offer_refname = response.request.url[url_match.span()[0]+1:url_match.span()[1]-1]
-
-
-            # for review in reviews:
-                
-            #     # TODO get it into a serializer
-            #     current_score = review.css("div.user-post__content")[0].css("span.user-post__score-count::text").get()
-            #     score_match = search("[0-9\,.]+/", current_score)
-            #     current_score = sub(",", ".", current_score[score_match.span()[0]:score_match.span()[1]-1])
-            #     current_score = float(current_score)
-
-            #     if ((current_score >= 4) or (current_score <= 2)) and (review.attrib["data-entry-id"] not in self.entry_ids):
-
-            #         offer_data = CeneoscrapeItem()
-
-            #         # Offer refname
-            #         offer_data["offer_ref"] = current_offer_refname
-                
-            #         # Entry ID
-            #         offer_data["entry_id"] = review.attrib["data-entry-id"]
-                
-            #         # Review Text
-            #         offer_data["review_text"] = " ".join(review.css("div.user-post__content")[0].css("div.user-post__text::text").getall())
-
-            #         offer_data["score"] = current_score
-                
-            #         yield offer_data
-
-    def parse_review(self, response, positive=False):
+    def parse_review(self, response, positive=False, limit = None, scraped_this_mode = 0):
         
         # Get offer-specific item features: title/categories
 
@@ -266,10 +235,12 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         reviews = response.css("div.user-post.user-post__card.js_product-review")[:10]
         
         # TODO get it into a serializer
-        url_match = search("/[0-9]+[;#]", response.request.url)
-        current_offer_refname = response.request.url[url_match.span()[0]+1:url_match.span()[1]-1]
+        url_match = search("/[0-9]{2,}", response.request.url)
+        current_offer_refname = response.request.url[url_match.span()[0]+1:url_match.span()[1]]
         
-        for review in reviews:
+        scraped_this_round = 0
+
+        for review in reviews[:limit]:
             
             # Extract and Format score given by each reviewer. Stop scraping if review has ambiguous score (3)
             current_score = review.css("div.user-post__content")[0].css("span.user-post__score-count::text").get()
@@ -307,5 +278,32 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                 offer_data["product_title"] = product_title
                 offer_data["full_category"] = full_product_category
                 offer_data["top_category"] = top_product_category
-
+                
+                scraped_this_round += 1
                 yield offer_data
+        
+        if positive:
+            limit -= scraped_this_round
+
+        next_page = response.css("a.pagination__item.pagination__next")
+
+        if (len(next_page) > 0) and positive and (limit > 0) and (scraped_this_round == 10):
+            # Create two ways of scraping: Focused on negative and on positive cases
+            pos = partial(self.parse_review, positive=True, limit = limit)
+        
+            yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=pos)                        
+
+        elif (len(next_page) > 0) and (not positive) and (scraped_this_round == 10):
+
+            neg = partial(self.parse_review, positive=False, scraped_this_mode=scraped_this_mode+scraped_this_round)
+
+            yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=neg)
+
+        elif (not positive):
+            # Create two ways of scraping: Focused on negative and on positive cases
+            pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + 2)
+        
+            yield response.follow(sub(";0162-0", ";0162-1", str(response.request.url)), callback=pos)
+
+        else:
+            pass
