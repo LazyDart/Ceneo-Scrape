@@ -55,9 +55,9 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         category_links = [selector.attrib["href"] for selector in categories]
 
         # TODO CLOTHES AND JEWELRLY REQUIRE SPECIAL CARE!
-        for i in range(12, 12 + len(category_links[0:1])):
+        for i in range(len(category_links)):
             # Get full link to a page by concatenating starting url with single category_link. 
-            current_category = self.start_urls[0] + "/Karmy_dla_psow"# category_links[i]
+            current_category = self.start_urls[0] + category_links[i]
 
             # Follow to a Second Parsing Function.
             yield response.follow(current_category, callback=self.parse_category)
@@ -83,8 +83,6 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         for offer in offers:
             
             try:
-                
-                # TODO NO REVIEW OFFERS ARE HERE FOR SOME REASON
                 # Review Link - Key Error happens at .attrib["href"]
                 offer_link = offer.css("a.product-reviews-link.link.link--accent.js_reviews-link.js_clickHash.js_seoUrl").attrib["href"]
 
@@ -93,62 +91,52 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                     and (r"/Click/Offer" not in offer_link)  # Excludes offers outside of Ceneo
                     and (r"https://redirect.ceneo.pl/offers/" not in offer_link)  # Excludes offers outside of Ceneo
                     and (float(sub("[\n]", "", sub(",", ".", offer.css("span.product-score::text").get()))) < 5)):  # Assure negative offers.
-                
-                    # TODO Cover limits feature - Limit is unused currently, might be used if offer balance will be more enforced
-                    # limit = int(sub("[^0-9]*", "", offer.css("a.product-reviews-link.link.link--accent.js_reviews-link.js_clickHash.js_seoUrl::text").get()))
-                    
+                   
                     # Extract offer_ref from link.
                     link_ref_match = match("/[0-9]+", offer_link)
                     offer_ref = offer_link[link_ref_match.span()[0]+1:link_ref_match.span()[1]]
 
                     # If offer_ref wasn't found in previous scrapes then open offer site.
                     if offer_ref not in self.offer_refs: 
-                        # TODO Skip #tab=reviews_scroll step and use ;0162-0 from the beginning.;
-                        
+
                         offer_link = r"https://www.ceneo.pl/" + offer_ref + ";0162-0"
                         self.offer_refs.add(offer_ref)
 
-                        print(offer_link)
-
-                        parse_func = partial(self.parse_offer, limit=max(20, 20))#, limit))
-                        
-                        yield response.follow(offer_link, callback=parse_func)
+                        yield response.follow(offer_link, callback=self.parse_offer)
 
             except KeyError:
                 # KeyError means offers with 0 reviews were found.
                 passed_counter += 1
 
-        # # Go to a next page in the same category.
-        # # If Almost all offers have NO REVIEWS (High passed_counter) stop goind to the next pages.
-        # next_page = response.css("a.pagination__item.pagination__next")
-        # if next_page and (passed_counter < 27):
-        #     yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=self.parse_category)
+        # Go to a next page in the same category.
+        # If Almost all offers have NO REVIEWS (High passed_counter) stop goind to the next pages.
+        next_page = response.css("a.pagination__item.pagination__next")
+        if next_page and (passed_counter < 27):
+            yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=self.parse_category)
 
-    def parse_offer(self, response, limit=20):
+    def parse_offer(self, response):
         """
         Third Parsing Functions. Decides whether enough negative offers are found and follows up to a last scraping function.
         """
         
-        # TODO Balanced seek version.
-        
-        # Used when the limit is used.
-        # total_reviews = int(sub("[^0-9]", "", response.css("div.score-extend__review::text")[0].get()))
-
         # Get counts of all reviews, by their scores. 2 of these counters exist in website, so take only half of values.
         score_percents = response.css("div.js_score-popup-filter-link.score-extend__row")
         score_percents = score_percents[:len(score_percents)//2]
 
         # Get those values into a dict, divide by 100 to get actual percentage.
-        score_dict = {int(score.css("span.score-extend__number::text").get()): float(score.css("span.score-extend__percent::text").get()[:-1])/100 for score in score_percents}
+        score_dict = {int(score.css("span.score-extend__number::text").get()):  # Score number
+                      float(score.css("span.score-extend__percent::text").get()[:-1])/100  # Percent of all Reviews
+                      for score in score_percents}
 
         # If percentage of negative values is greater than 0 then follow up and scrape reviews.
         if score_dict[2] + score_dict[1] > 0:
 
-            positive = False
-
             product_title = response.css("div.product-top__title h1::text").get()
 
-            full_product_category = response.css("nav.js_breadcrumbs.breadcrumbs").css("a.js_breadcrumbs__item.breadcrumbs__item.link span::text").getall()
+            full_product_category = (response
+                                        .css("nav.js_breadcrumbs.breadcrumbs")
+                                        .css("a.js_breadcrumbs__item.breadcrumbs__item.link span::text")
+                                        .getall())
 
             top_product_category = full_product_category[-1]
 
@@ -171,8 +159,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                 current_score = float(current_score)
 
 
-                if (((positive and current_score >= 4) 
-                    or (not positive and current_score <= 2)) 
+                if ((current_score <= 2) 
                     and (review.attrib["data-entry-id"] not in self.entry_ids)):
 
                     offer_data = CeneoscrapeItem()
@@ -185,7 +172,9 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                     offer_data["entry_id"] = review.attrib["data-entry-id"]
                 
                     # Review Text
-                    offer_data["review_text"] = " ".join(review.css("div.user-post__content")[0].css("div.user-post__text::text").getall())
+                    offer_data["review_text"] = " ".join(review.css("div.user-post__content")[0]
+                                                               .css("div.user-post__text::text")
+                                                               .getall())
 
                     # Score
                     offer_data["score"] = current_score
@@ -207,15 +196,16 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             next_page = response.css("a.pagination__item.pagination__next")
 
             if (negatives_scraped == 10) and (len(next_page) > 0):
-
+                
+                # Continue scraping negative reviews on the next page.
                 neg = partial(self.parse_review, positive=False, scraped_this_mode=10)
 
                 yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=neg)
 
             else:
-            # Create two ways of scraping: Focused on negative and on positive cases
-                pos = partial(self.parse_review, positive=True, limit = negatives_scraped + 2)
 
+                # When negative cases have finished. Start scraping positive reviews.
+                pos = partial(self.parse_review, positive=True, limit = negatives_scraped + 2)
             
                 yield response.follow(sub(";0162-0", ";0162-1", str(response.request.url)), callback=pos)
             
@@ -226,7 +216,10 @@ class CeneoReviewScraperSpider(scrapy.Spider):
 
         product_title = response.css("div.product-top__title h1::text").get()
 
-        full_product_category = response.css("nav.js_breadcrumbs.breadcrumbs").css("a.js_breadcrumbs__item.breadcrumbs__item.link span::text").getall()
+        full_product_category = (response
+                                 .css("nav.js_breadcrumbs.breadcrumbs")
+                                 .css("a.js_breadcrumbs__item.breadcrumbs__item.link span::text")
+                                 .getall())
 
         top_product_category = full_product_category[-1]
 
@@ -263,7 +256,9 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                 offer_data["entry_id"] = review.attrib["data-entry-id"]
             
                 # Review Text
-                offer_data["review_text"] = " ".join(review.css("div.user-post__content")[0].css("div.user-post__text::text").getall())
+                offer_data["review_text"] = " ".join(review.css("div.user-post__content")[0]
+                                                           .css("div.user-post__text::text")
+                                                           .getall())
 
                 # Score
                 offer_data["score"] = current_score
@@ -282,25 +277,30 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                 scraped_this_round += 1
                 yield offer_data
         
+        # Limit is a total of negative reviews scraped. 
+        # Decrease the limit before going to a next page.
         if positive:
             limit -= scraped_this_round
 
         next_page = response.css("a.pagination__item.pagination__next")
 
         if (len(next_page) > 0) and positive and (limit > 0) and (scraped_this_round == 10):
-            # Create two ways of scraping: Focused on negative and on positive cases
+            
+            # Continue Scraping positive reviews on the next page.
             pos = partial(self.parse_review, positive=True, limit = limit)
         
             yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=pos)                        
 
         elif (len(next_page) > 0) and (not positive) and (scraped_this_round == 10):
-
+            
+            # Continue scraping negative reviews on the next page.
             neg = partial(self.parse_review, positive=False, scraped_this_mode=scraped_this_mode+scraped_this_round)
 
             yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=neg)
 
         elif (not positive):
-            # Create two ways of scraping: Focused on negative and on positive cases
+            
+            # When negative cases have finished. Start scraping positive reviews.
             pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + 2)
         
             yield response.follow(sub(";0162-0", ";0162-1", str(response.request.url)), callback=pos)
