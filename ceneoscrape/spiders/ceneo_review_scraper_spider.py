@@ -7,13 +7,13 @@ import os
 import csv
 
 from re import sub, match, search
-
+from itertools import chain
 
 class CeneoReviewScraperSpider(scrapy.Spider):
     name = "ceneocatselect"
     allowed_domains = ["www.ceneo.pl"]
     start_urls = ["https://www.ceneo.pl/"]
-    custom_settings = {'CLOSESPIDER_PAGECOUNT': 80, 'DOWNLOAD_DELAY': 0.5}
+    custom_settings = {'CLOSESPIDER_PAGECOUNT': 1000, 'DOWNLOAD_DELAY': 0.5}
 
     # TODO MAKE IT MORE CLASS Like??
     # After Initialization Load all previously saved data id's
@@ -49,12 +49,19 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         Then opens link to each of those categories.
         TODO: Maybe an option exists to browse all categories. Not only popular ones.
         """
+        
+        # Get All categories sub menus
+        sub_menus = response.css("div.js_cat-menu-item.cat-menu-item")
+        
+        # For each menu excluding jewelry, fashion and erotic get all sub-categories
+        sub_menus = [menu for menu in sub_menus if menu.css("a.cat-menu-item__link") and (menu.css("a.cat-menu-item__link").attrib["href"] not in [r"/Bizuteria_i_zegarki", r"/Moda", r"/Erotyka"])]
 
-        # .pop-cat-item defines all most popular categories page elements.
-        categories = response.css(".pop-cat-item")
-        category_links = [selector.attrib["href"] for selector in categories]
+        # Get links to all sub-categories
+        category_links = [menu.css(".pop-cat-item::attr(href)").getall() for menu in sub_menus if menu.css(".pop-cat-item")]
 
-        # TODO CLOTHES AND JEWELRLY REQUIRE SPECIAL CARE!
+        # join list of lists
+        category_links = list(chain.from_iterable(category_links))
+
         for i in range(len(category_links)):
             # Get full link to a page by concatenating starting url with single category_link. 
             current_category = self.start_urls[0] + category_links[i]
@@ -63,7 +70,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             yield response.follow(current_category, callback=self.parse_category)
 
         pass
-
+        
     def parse_category(self, response):
         """
         Second Parsing Function
