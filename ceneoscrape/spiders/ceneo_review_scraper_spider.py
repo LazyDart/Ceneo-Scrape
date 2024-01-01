@@ -13,7 +13,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
     name = "ceneocatselect"
     allowed_domains = ["www.ceneo.pl"]
     start_urls = ["https://www.ceneo.pl/"]
-    custom_settings = {'CLOSESPIDER_PAGECOUNT': 60, 'DOWNLOAD_DELAY': 1}
+    custom_settings = {'CLOSESPIDER_PAGECOUNT': 2000, 'DOWNLOAD_DELAY': 1}
 
     # TODO MAKE IT MORE CLASS Like??
     # After Initialization Load all previously saved data id's
@@ -175,7 +175,10 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                 datetimes = reviews.css("div.user-post__content span.user-post__published time")
 
                 offer_data["entry_date"] = datetimes[0].attrib["datetime"]
-                offer_data["purchase_date"] = datetimes[1].attrib["datetime"]
+                if len(datetimes) > 1:
+                    offer_data["purchase_date"] = datetimes[1].attrib["datetime"]
+                else:
+                    offer_data["purchase_date"] = ""
 
                 # Add offer specific data.
                 offer_data["product_title"] = product_title
@@ -218,17 +221,20 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             if (negatives_scraped == 10) and (len(next_page) > 0):
                 
                 # Continue scraping negative reviews on the next page.
-                neg = partial(self.parse_review, positive=False, scraped_this_mode=10, medium=medium)
+                neg = partial(self.parse_review, positive=False, scraped_this_mode=10, medium=medium, review_percentage=score_dict)
 
                 yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=neg)
 
             else:
                 
                 # When negative cases have finished. Start scraping positive reviews.
-                pos = partial(self.parse_review, positive=True, limit = negatives_scraped + 2, all_negatives_scraped = negatives_scraped + 2, medium=medium)
+                pos = partial(self.parse_review, positive=True, limit = negatives_scraped + 2, all_negatives_scraped = negatives_scraped + 2, medium=medium, review_percentage=score_dict)
             
-                if medium:
+                if medium and (score_dict[4] > 0):
                     next_page = sub("(opinie-[0-9]+)*;0162-0", ";0162-0;ocena-4", str(response.request.url))
+                
+                elif medium and (score_dict[4] > 0):
+                    next_page = sub("(opinie-[0-9]+)*;0162-0", ";0162-1;ocena-3", str(response.request.url))
 
                 else:
                     next_page = sub("(opinie-[0-9]+)*;0162-0", ";0162-1", str(response.request.url))
@@ -236,7 +242,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                 yield response.follow(next_page, callback=pos)
 
 
-    def parse_review(self, response, positive=False, limit = None, scraped_this_mode = 0, medium=False, all_negatives_scraped=0):
+    def parse_review(self, response, positive=False, limit = None, scraped_this_mode = 0, medium=False, all_negatives_scraped=0, review_percentage=None):
         
         items_list, scraped_this_round = self.scrape_reviews(response, positive, medium, limit)
 
@@ -248,8 +254,8 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         if positive:
             limit -= scraped_this_round
 
-        if positive and medium and (scraped_this_round < 10) and ("ocena-4" in str(response.request.url)):
-            next_page = sub("(opinie-[0-9]+)*;0162-0;ocena-4", ";0162-1;ocena-3", str(response.request.url)[:len(self.start_urls[0])])
+        if positive and medium and (scraped_this_round < 10) and ("ocena-4" in str(response.request.url)) and (review_percentage[3] > 0):
+            next_page = sub("(opinie-[0-9]+)*;0162-0;ocena-4", ";0162-1;ocena-3", str(response.request.url)[len(self.start_urls[0]):])
 
         elif scraped_this_round == 10:
             next_page = response.css("a.pagination__item.pagination__next")
@@ -258,7 +264,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         else:
             next_page = ""
 
-        if (len(next_page) > 0) and positive and medium and (limit > 0) and ("ocena-4" in str(response.request.url)):
+        if (len(next_page) > 0) and positive and medium and (limit > 0) and ("ocena-4" in str(response.request.url)) and (review_percentage[3] > 0):
             
             # Continue Scraping medium score reviews on the next page.
             pos = partial(self.parse_review, positive=True, limit = limit, all_negatives_scraped=all_negatives_scraped, medium=True)
@@ -284,7 +290,9 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             # When negative cases have finished. Start scraping positive reviews.
             pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + 2, medium=True, all_negatives_scraped=scraped_this_mode + scraped_this_round + 2)
         
-            yield response.follow(sub("(opinie-[0-9]+)*;0162-0", ";0162-0;ocena-4", str(response.request.url)), callback=pos)
+            next_review_type = ";0162-0;ocena-4" if review_percentage[4] > 0 else ";0162-1;ocena-3"
+
+            yield response.follow(sub("(opinie-[0-9]+)*;0162-0", next_review_type, str(response.request.url)), callback=pos)
         
         elif (not positive):
     
