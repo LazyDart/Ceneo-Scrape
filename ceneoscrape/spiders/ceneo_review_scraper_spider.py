@@ -13,7 +13,9 @@ class CeneoReviewScraperSpider(scrapy.Spider):
     name = "ceneocatselect"
     allowed_domains = ["www.ceneo.pl"]
     start_urls = ["https://www.ceneo.pl/"]
-    custom_settings = {'CLOSESPIDER_PAGECOUNT': 2000, 'DOWNLOAD_DELAY': 1}
+    custom_settings = {#'CLOSESPIDER_PAGECOUNT': 20,
+                       'CLOSESPIDER_ITEMCOUNT': 4000, 
+                       'DOWNLOAD_DELAY': 0.75}
 
     # TODO MAKE IT MORE CLASS Like??
     # After Initialization Load all previously saved data id's
@@ -51,8 +53,9 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         # Get All categories sub menus
         sub_menus = response.css("div.js_cat-menu-item.cat-menu-item")
         
+        # TODO Temporary! AGD Exclusion and rtv
         # For each menu excluding jewelry, fashion and erotic get all sub-categories
-        sub_menus = [menu for menu in sub_menus if menu.css("a.cat-menu-item__link") and (menu.css("a.cat-menu-item__link").attrib["href"] not in [r"/Bizuteria_i_zegarki", r"/Moda", r"/Erotyka"])]
+        sub_menus = [menu for menu in sub_menus if menu.css("a.cat-menu-item__link") and (menu.css("a.cat-menu-item__link").attrib["href"] not in [r"/Bizuteria_i_zegarki", r"/Moda", r"/Erotyka", r"/Sprzet_AGD", r"/Sprzet_RTV"])]
 
         # Get links to all sub-categories
         category_links = [menu.css(".pop-cat-item::attr(href)").getall() for menu in sub_menus if menu.css(".pop-cat-item")]
@@ -60,9 +63,11 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         # join list of lists
         category_links = list(chain.from_iterable(category_links))
 
-        for i in range(0, len(category_links)):
+        # for i in range(0, len(category_links)):
+        for category_link in category_links[::-1]: 
+
             # Get full link to a page by concatenating starting url with single category_link. 
-            current_category = self.start_urls[0] + category_links[i]
+            current_category = self.start_urls[0] + category_link#category_links[i]
 
             # Follow to a Second Parsing Function.
             yield response.follow(current_category, callback=self.parse_category)
@@ -117,7 +122,18 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         # Go to a next page in the same category.
         # If Almost all offers have NO REVIEWS (High passed_counter) stop goind to the next pages.
         next_page = response.css("a.pagination__item.pagination__next")
-        if next_page and (passed_counter < 27):
+
+        pagination_match = search("-\d-\d-\d{,2}", response.request.url)
+
+        if pagination_match:
+            # TODO Temporary page_number limit.
+            page_number = int(response.request.url[pagination_match.span()[0]: pagination_match.span()[1]].split("-")[-1])
+        else:
+            page_number=0
+
+        print(page_number)
+
+        if next_page and (passed_counter < 27) and (page_number < 5):
             yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=self.parse_category)
 
 
@@ -162,7 +178,9 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             
                 # Entry ID
                 offer_data["entry_id"] = review.attrib["data-entry-id"]
-            
+                self.entry_ids.add(review.attrib["data-entry-id"])
+
+
                 # Review Text
                 offer_data["review_text"] = " ".join(review.css("div.user-post__content")[0]
                                                            .css("div.user-post__text::text")
