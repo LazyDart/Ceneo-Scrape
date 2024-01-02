@@ -7,14 +7,15 @@ import os
 import csv
 
 from re import sub, match, search
+from random import shuffle
 from itertools import chain
 
 class CeneoReviewScraperSpider(scrapy.Spider):
     name = "ceneocatselect"
     allowed_domains = ["www.ceneo.pl"]
     start_urls = ["https://www.ceneo.pl/"]
-    custom_settings = {#'CLOSESPIDER_PAGECOUNT': 20,
-                       'CLOSESPIDER_ITEMCOUNT': 4000, 
+    custom_settings = {'CLOSESPIDER_PAGECOUNT': 3000,
+                    #    'CLOSESPIDER_ITEMCOUNT': 4000, 
                        'DOWNLOAD_DELAY': 0.75}
 
     # TODO MAKE IT MORE CLASS Like??
@@ -35,8 +36,8 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         file = open("output.csv")
         olderdata = csv.reader(file)
         for row in olderdata:
-            entry_ids.add(row[0])
-            offer_refs.add(row[1])
+            entry_ids.add(row[1])
+            offer_refs.add(row[3])
         
         file.close()
 
@@ -55,7 +56,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         
         # TODO Temporary! AGD Exclusion and rtv
         # For each menu excluding jewelry, fashion and erotic get all sub-categories
-        sub_menus = [menu for menu in sub_menus if menu.css("a.cat-menu-item__link") and (menu.css("a.cat-menu-item__link").attrib["href"] not in [r"/Bizuteria_i_zegarki", r"/Moda", r"/Erotyka", r"/Sprzet_AGD", r"/Sprzet_RTV"])]
+        sub_menus = [menu for menu in sub_menus if menu.css("a.cat-menu-item__link") and (menu.css("a.cat-menu-item__link").attrib["href"] not in [r"/Bizuteria_i_zegarki", r"/Moda", r"/Erotyka"])]
 
         # Get links to all sub-categories
         category_links = [menu.css(".pop-cat-item::attr(href)").getall() for menu in sub_menus if menu.css(".pop-cat-item")]
@@ -63,8 +64,10 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         # join list of lists
         category_links = list(chain.from_iterable(category_links))
 
+        shuffle(category_links)
+
         # for i in range(0, len(category_links)):
-        for category_link in category_links[::-1]: 
+        for category_link in category_links: 
 
             # Get full link to a page by concatenating starting url with single category_link. 
             current_category = self.start_urls[0] + category_link#category_links[i]
@@ -130,8 +133,6 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             page_number = int(response.request.url[pagination_match.span()[0]: pagination_match.span()[1]].split("-")[-1])
         else:
             page_number=0
-
-        print(page_number)
 
         if next_page and (passed_counter < 27) and (page_number < 5):
             yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=self.parse_category)
@@ -246,7 +247,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             else:
                 
                 # When negative cases have finished. Start scraping positive reviews.
-                pos = partial(self.parse_review, positive=True, limit = negatives_scraped + 2, all_negatives_scraped = negatives_scraped + 2, medium=medium, review_percentage=score_dict)
+                pos = partial(self.parse_review, positive=True, limit = negatives_scraped + 4, all_negatives_scraped = negatives_scraped + 4, medium=medium, review_percentage=score_dict)
             
                 if medium and (score_dict[4] > 0):
                     next_page = sub("(opinie-[0-9]+)*;0162-0", ";0162-0;ocena-4", str(response.request.url))
@@ -258,6 +259,21 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                     next_page = sub("(opinie-[0-9]+)*;0162-0", ";0162-1", str(response.request.url))
 
                 yield response.follow(next_page, callback=pos)
+        else:
+            # Mark the offer as invalid for scraping.
+            offer_data = CeneoscrapeItem()
+            offer_data["offer_ref"] = response.request.url
+        
+            offer_data["entry_id"] = ""
+            offer_data["review_text"] = ""
+            offer_data["score"] = ""
+            offer_data["entry_date"] = ""
+            offer_data["purchase_date"] = ""
+            offer_data["product_title"] = ""
+            offer_data["full_category"] = ""
+            offer_data["top_category"] = ""
+            yield offer_data
+            
 
 
     def parse_review(self, response, positive=False, limit = None, scraped_this_mode = 0, medium=False, all_negatives_scraped=0, review_percentage=None):
@@ -306,7 +322,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         elif (not positive) and medium:
             
             # When negative cases have finished. Start scraping positive reviews.
-            pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + 2, medium=True, all_negatives_scraped=scraped_this_mode + scraped_this_round + 2)
+            pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + 4, medium=True, all_negatives_scraped=scraped_this_mode + scraped_this_round + 4)
         
             next_review_type = ";0162-0;ocena-4" if review_percentage[4] > 0 else ";0162-1;ocena-3"
 
@@ -315,7 +331,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         elif (not positive):
     
             # When negative cases have finished. Start scraping positive reviews.
-            pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + 2)
+            pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + 4)
         
             yield response.follow(sub("(opinie-[0-9]+)*;0162-0", ";0162-1", str(response.request.url)), callback=pos)
         
