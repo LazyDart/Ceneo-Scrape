@@ -1,7 +1,7 @@
 # Review Scraper Project
 
-This project is a web scraper implemented in Python using the Scrapy framework. It is designed to scrape reviews from the Ceneo website, while maintaining class balance between Positive, Negative and Neutral reviews. Scraper maintains roughly the same number of each classes throughout different categories of product.
-It is a first part of my Sentiment Analysis of Ceneo Reviews project. For the second part go to:
+This project is a web scraper implemented in Python using the Scrapy framework. It is designed to scrape reviews from the Ceneo website, while maintaining class balance between Positive, Negative and Neutral reviews. Scraper maintains roughly the same number of each classes throughout different categories of product.<br>
+It is a first part of my Sentiment Analysis of Ceneo Reviews project. For the second part go to:<br>
 https://github.com/LazyDart/Review-Sentiment-Analysis
 
 ## Key Features
