@@ -1,4 +1,4 @@
-# Review Scraper Project
+![Review Scraper Project](Ceneo_Review_Scraper.png)
 
 This project is a web scraper implemented in Python using the Scrapy framework. It is designed to scrape reviews from the Ceneo website, while maintaining class balance between Positive, Negative and Neutral reviews. Scraper maintains roughly the same number of each classes throughout different categories of product.<br>
 It is a first part of my Sentiment Analysis of Ceneo Reviews project. For the second part go to:<br>
