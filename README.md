@@ -1,5 +1,9 @@
 ![Review Scraper Project](Ceneo_Review_Scraper.png)
-
+<br>
+![Python](https://img.shields.io/badge/python-v3.11-blue.svg)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+<a target="_blank" href="https://www.linkedin.com/in/tkacz-milosz-data-science/"><img height="20" src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white" /></a>
+<br>
 This project is a web scraper implemented in Python using the Scrapy framework. It is designed to scrape reviews from the Ceneo website, while maintaining class balance between Positive, Negative and Neutral reviews. Scraper maintains roughly the same number of each classes throughout different categories of product.<br>
 It is a first part of my Sentiment Analysis of Ceneo Reviews project. For the second part go to:<br>
 https://github.com/LazyDart/Review-Sentiment-Analysis
