@@ -16,7 +16,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
     start_urls = ["https://www.ceneo.pl/"]
     custom_settings = {'CLOSESPIDER_PAGECOUNT': 3000,
                     #    'CLOSESPIDER_ITEMCOUNT': 4000, 
-                       'DOWNLOAD_DELAY': 0.75}
+                       'DOWNLOAD_DELAY': 0.5}
 
     # TODO MAKE IT MORE CLASS Like??
     # After Initialization Load all previously saved data id's
@@ -247,7 +247,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             else:
                 
                 # When negative cases have finished. Start scraping positive reviews.
-                pos = partial(self.parse_review, positive=True, limit = negatives_scraped + 4, all_negatives_scraped = negatives_scraped + 4, medium=medium, review_percentage=score_dict)
+                pos = partial(self.parse_review, positive=True, limit = negatives_scraped + 8, all_negatives_scraped = negatives_scraped + 8, medium=medium, review_percentage=score_dict)
             
                 if medium and (score_dict[4] > 0):
                     next_page = sub("(opinie-[0-9]+)*;0162-0", ";0162-0;ocena-4", str(response.request.url))
@@ -322,7 +322,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         elif (not positive) and medium:
             
             # When negative cases have finished. Start scraping positive reviews.
-            pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + 4, medium=True, all_negatives_scraped=scraped_this_mode + scraped_this_round + 4)
+            pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + 8, medium=True, all_negatives_scraped=scraped_this_mode + scraped_this_round + 8)
         
             next_review_type = ";0162-0;ocena-4" if review_percentage[4] > 0 else ";0162-1;ocena-3"
 
@@ -331,7 +331,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         elif (not positive):
     
             # When negative cases have finished. Start scraping positive reviews.
-            pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + 4)
+            pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + 8)
         
             yield response.follow(sub("(opinie-[0-9]+)*;0162-0", ";0162-1", str(response.request.url)), callback=pos)
         
