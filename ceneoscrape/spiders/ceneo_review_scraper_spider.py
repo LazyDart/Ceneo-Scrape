@@ -16,7 +16,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
     start_urls = ["https://www.ceneo.pl/"]
     custom_settings = {'CLOSESPIDER_PAGECOUNT': 3000,
                     #    'CLOSESPIDER_ITEMCOUNT': 4000, 
-                       'DOWNLOAD_DELAY': 0.5}
+                       'DOWNLOAD_DELAY': .5}
 
     # TODO MAKE IT MORE CLASS Like??
     # After Initialization Load all previously saved data id's
@@ -30,57 +30,70 @@ class CeneoReviewScraperSpider(scrapy.Spider):
 
     # output.csv is hard coded, this is a default output name for my programm.
     # If it is found, offer_refs and entry_ids are populated with data.
-    if "output.csv" in os.listdir("./"):
+    # if "output.csv" in os.listdir("./"):
         
-        # Data is Read using csv library.
-        file = open("output.csv")
-        olderdata = csv.reader(file)
-        for row in olderdata:
-            entry_ids.add(row[1])
-            offer_refs.add(row[3])
+    #     # Data is Read using csv library.
+    #     file = open("output.csv")
+    #     olderdata = csv.reader(file)
+    #     for row in olderdata:
+    #         entry_ids.add(row[1])
+    #         offer_refs.add(row[3])
         
-        file.close()
+    #     file.close()
 
+
+    # def parse(self, response):
+    #     """
+    #     First Parsing Function
+
+    #     Loads Ceneo Home-page and reads "most popular categories" link.
+    #     Then opens link to each of those categories.
+    #     TODO: Maybe an option exists to browse all categories. Not only popular ones.
+    #     """
+        
+    #     # Get All categories sub menus
+    #     sub_menus = response.css("div.js_cat-menu-item.cat-menu-item")
+        
+    #     # For each menu excluding jewelry, fashion and erotic get all sub-categories
+    #     sub_menus = [menu for menu in sub_menus 
+    #                  if menu.css("a.cat-menu-item__link") 
+    #                     and (menu.css("a.cat-menu-item__link").attrib["href"] not in [r"/Bizuteria_i_zegarki",
+    #                                                                                   r"/Moda",
+    #                                                                                   r"/Erotyka"])
+    #     ]
+
+    #     # Get links to all sub-categories
+    #     category_links = [menu.css(".pop-cat-item::attr(href)").getall() for menu in sub_menus if menu.css(".pop-cat-item")]
+
+    #     # join list of lists
+    #     category_links = list(chain.from_iterable(category_links))
+
+    #     shuffle(category_links)
+
+    #     # for i in range(0, len(category_links)):
+    #     for category_link in category_links: 
+
+    #         # Get full link to a page by concatenating starting url with single category_link. 
+    #         current_category = self.start_urls[0] + category_link#category_links[i]
+
+    #         # Follow to a Second Parsing Function.
+    #         yield response.follow(current_category, callback=self.parse_category)
+
+    #     pass
 
     def parse(self, response):
-        """
-        First Parsing Function
+        if "unfinished offers.csv" in os.listdir("./"):
+            # Data is Read using csv library.
+            file = open("unfinished offers.csv")
+            olderdata = csv.reader(file)
+            
+            counter = 0
+            for row in list(olderdata)[1:10]:
+                offer_link = self.start_urls[0] + row[0] + ";0162-0"
+                yield response.follow(offer_link, callback=self.parse_offer)
 
-        Loads Ceneo Home-page and reads "most popular categories" link.
-        Then opens link to each of those categories.
-        TODO: Maybe an option exists to browse all categories. Not only popular ones.
-        """
-        
-        # Get All categories sub menus
-        sub_menus = response.css("div.js_cat-menu-item.cat-menu-item")
-        
-        # For each menu excluding jewelry, fashion and erotic get all sub-categories
-        sub_menus = [menu for menu in sub_menus 
-                     if menu.css("a.cat-menu-item__link") 
-                        and (menu.css("a.cat-menu-item__link").attrib["href"] not in [r"/Bizuteria_i_zegarki",
-                                                                                      r"/Moda",
-                                                                                      r"/Erotyka"])
-        ]
-
-        # Get links to all sub-categories
-        category_links = [menu.css(".pop-cat-item::attr(href)").getall() for menu in sub_menus if menu.css(".pop-cat-item")]
-
-        # join list of lists
-        category_links = list(chain.from_iterable(category_links))
-
-        shuffle(category_links)
-
-        # for i in range(0, len(category_links)):
-        for category_link in category_links: 
-
-            # Get full link to a page by concatenating starting url with single category_link. 
-            current_category = self.start_urls[0] + category_link#category_links[i]
-
-            # Follow to a Second Parsing Function.
-            yield response.follow(current_category, callback=self.parse_category)
-
-        pass
-        
+            file.close()
+            
 
     def parse_category(self, response):
         """
@@ -387,7 +400,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             # When neutral cases have finished. Start scraping positive reviews.
             pos = partial(self.parse_review, positive=True, limit = all_negatives_scraped)
 
-            yield response.follow(sub("(opinie-[0-9]+)*;0162-1.*", ";0162-1", str(response.request.url)), callback=pos)
+            yield response.follow(sub("(opinie-[0-9]+)*;0162-[0-1].*", ";0162-1", str(response.request.url)), callback=pos)
 
         else:
             pass
