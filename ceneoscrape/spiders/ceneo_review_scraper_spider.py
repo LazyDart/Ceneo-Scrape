@@ -94,7 +94,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             offer_batch = list(olderdata)[1:]
             shuffle(offer_batch)
 
-            for row in offer_batch[:300]:
+            for row in offer_batch[:1000]:
                 offer_link = self.start_urls[0] + row[0] + ";0162-0"
                 partial_smaller_increase = partial(self.parse_offer, positive_increase=3)
                 yield response.follow(offer_link, callback=partial_smaller_increase)
@@ -276,23 +276,25 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             if (negatives_scraped == 10) and (len(next_page) > 0):
                 
                 # Continue scraping negative reviews on the next page.
-                neg = partial(self.parse_review, 
+                neg = partial(self.parse_reviews_page, 
                               positive=False, 
                               scraped_this_mode=10, 
                               neutral=neutral, 
-                              review_percentage=score_dict)
+                              review_percentage=score_dict,
+                              positive_increase = positive_increase)
 
                 yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=neg)
 
             else:
                 
                 # When negative cases have finished. Start scraping positive reviews.
-                pos = partial(self.parse_review, 
+                pos = partial(self.parse_reviews_page, 
                               positive=True, 
                               limit = negatives_scraped + positive_increase, 
                               all_negatives_scraped = negatives_scraped + positive_increase, 
                               neutral=neutral, 
-                              review_percentage=score_dict)
+                              review_percentage=score_dict,
+                              positive_increase = positive_increase)
 
                 if neutral and (score_dict[4] > 0):
                     next_page = sub("(opinie-[0-9]+)*;0162-0", ";0162-0;ocena-4", str(response.request.url))
@@ -323,14 +325,15 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             
 
 
-    def parse_review(self, 
+    def parse_reviews_page(self, 
                      response, 
                      positive=False, 
                      limit = None, 
                      scraped_this_mode = 0, 
                      neutral=False, 
                      all_negatives_scraped=0, 
-                     review_percentage=None):
+                     review_percentage=None,
+                     positive_increase=8):
         """
         Fourth Parsing Function. Scrapes reviews from a single page. 
         Then decides whether to continue scraping and what type of reviews to look for next.
@@ -351,9 +354,12 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             limit -= scraped_this_round
         
         # Determine what is the next page to scrape.
-        if positive and neutral and (scraped_this_round < 10) and ("ocena-4" in str(response.request.url)) and (review_percentage[3] > 0):
+        if (positive and neutral and (scraped_this_round < 10) 
+            and ("ocena-4" in str(response.request.url)) and (review_percentage[3] > 0)):
             # Reviews with score 4 turn to score 3.
-            next_page = sub("(opinie-[0-9]+)*;0162-0;ocena-4", ";0162-1;ocena-3", str(response.request.url)[len(self.start_urls[0]):])
+            next_page = sub("(opinie-[0-9]+)*;0162-0;ocena-4", 
+                            ";0162-1;ocena-3", 
+                            str(response.request.url)[len(self.start_urls[0]):])
 
         elif scraped_this_round == 10:
             # continue with the same mode of scraping.
@@ -365,49 +371,88 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             next_page = ""
 
 
-        if (len(next_page) > 0) and positive and neutral and (limit > 0) and ("ocena-4" in str(response.request.url)) and (review_percentage[3] > 0):
+        if ((len(next_page) > 0) and positive and neutral and (limit > 0)  
+             and ("ocena-4" in str(response.request.url)) and (review_percentage[3] > 0)):
             
             # Continue Scraping neutral score reviews on the next page.
-            pos = partial(self.parse_review, positive=True, limit = limit, all_negatives_scraped=all_negatives_scraped, neutral=True)
+            pos = partial(self.parse_reviews_page, 
+                          positive = True, 
+                          limit = limit, 
+                          all_negatives_scraped = all_negatives_scraped, 
+                          neutral = True, 
+                          positive_increase = positive_increase, 
+                          review_percentage = review_percentage)
         
             yield response.follow(self.start_urls[0] + next_page, callback=pos)                        
 
         elif (len(next_page) > 0) and positive and (limit > 0) and (scraped_this_round == 10):
             
             # Continue Scraping positive reviews on the next page.
-            pos = partial(self.parse_review, positive=True, limit = limit, all_negatives_scraped=all_negatives_scraped)
+            pos = partial(self.parse_reviews_page, 
+                          positive=True, 
+                          limit = limit, 
+                          all_negatives_scraped = all_negatives_scraped, 
+                          positive_increase = positive_increase, 
+                          review_percentage = review_percentage)
         
             yield response.follow(self.start_urls[0] + next_page, callback=pos)                        
 
         elif (len(next_page) > 0) and (not positive) and (scraped_this_round == 10):
             
             # Continue scraping negative reviews on the next page.
-            neg = partial(self.parse_review, positive=False, scraped_this_mode=scraped_this_mode+scraped_this_round)
+            neg = partial(self.parse_reviews_page, 
+                          positive=False, 
+                          scraped_this_mode = scraped_this_mode + scraped_this_round, 
+                          positive_increase = positive_increase, 
+                          review_percentage = review_percentage)
 
             yield response.follow(self.start_urls[0] + next_page, callback=neg)
 
         elif (not positive) and neutral:
             
             # When negative cases have finished. Start scraping neutral reviews.
-            pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + positive_increase, neutral=True, all_negatives_scraped=scraped_this_mode + scraped_this_round + positive_increase)
+            pos = partial(self.parse_reviews_page, 
+                          positive=True, 
+                          limit = scraped_this_mode + scraped_this_round + positive_increase, 
+                          neutral = True, 
+                          all_negatives_scraped = scraped_this_mode + scraped_this_round + positive_increase, 
+                          positive_increase = positive_increase, 
+                          review_percentage = review_percentage)
         
             next_review_type = ";0162-0;ocena-4" if review_percentage[4] > 0 else ";0162-1;ocena-3"
 
-            yield response.follow(sub("(opinie-[0-9]+)*;0162-0", next_review_type, str(response.request.url)), callback=pos)
+            yield response.follow(sub("(opinie-[0-9]+)*;0162-0", 
+                                      next_review_type, 
+                                      str(response.request.url)),
+                                  callback = pos)
         
         elif (not positive):
     
             # When negative cases have finished. Start scraping positive reviews.
-            pos = partial(self.parse_review, positive=True, limit = scraped_this_mode + scraped_this_round + positive_increase)
+            pos = partial(self.parse_reviews_page, 
+                          positive=True, 
+                          limit = scraped_this_mode + scraped_this_round + positive_increase, 
+                          positive_increase = positive_increase, 
+                          review_percentage = review_percentage)
         
-            yield response.follow(sub("(opinie-[0-9]+)*;0162-0", ";0162-1", str(response.request.url)), callback=pos)
+            yield response.follow(sub("(opinie-[0-9]+)*;0162-0", 
+                                      ";0162-1", 
+                                      str(response.request.url)),
+                                  callback=pos)
         
         elif (positive and neutral):
 
             # When neutral cases have finished. Start scraping positive reviews.
-            pos = partial(self.parse_review, positive=True, limit = all_negatives_scraped)
+            pos = partial(self.parse_reviews_page, 
+                          positive=True, 
+                          limit = all_negatives_scraped, 
+                          positive_increase = positive_increase, 
+                          review_percentage = review_percentage)
 
-            yield response.follow(sub("(opinie-[0-9]+)*;0162-[0-1].*", ";0162-1", str(response.request.url)), callback=pos)
+            yield response.follow(sub("(opinie-[0-9]+)*;0162-[0-1].*", 
+                                      ";0162-1", 
+                                      str(response.request.url)), 
+                                 callback=pos)
 
         else:
             pass
