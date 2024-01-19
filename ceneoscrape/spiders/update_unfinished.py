@@ -14,7 +14,7 @@ def main(new_scrape_file="supplement.csv", unfinished_file="unfinished offers.cs
                           df[df["score"] >= 4].groupby("offer_ref")["review_text"].count(), how="outer", on="offer_ref")
 
     # Get those that have more positive than negative reviews
-    finished = comparison[(comparison["review_text_x"] < comparison["review_text_y"]) & (~comparison["review_text_y"].isna())].index.to_series()
+    finished = comparison[(comparison["review_text_x"] <= comparison["review_text_y"]) & (~comparison["review_text_y"].isna())].index.to_series()
 
     # read unfinished offers
     unfinished = pd.read_csv(unfinished_file)

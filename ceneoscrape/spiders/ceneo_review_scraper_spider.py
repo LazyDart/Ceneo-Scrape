@@ -16,6 +16,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
     start_urls = ["https://www.ceneo.pl/"]
     custom_settings = {'CLOSESPIDER_PAGECOUNT': 3000,
                     #    'CLOSESPIDER_ITEMCOUNT': 4000, 
+                       'DUPEFILTER_CLASS': 'scrapy.dupefilters.BaseDupeFilter',
                        'DOWNLOAD_DELAY': .5}
 
     # TODO MAKE IT MORE CLASS Like??
@@ -94,7 +95,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             offer_batch = list(olderdata)[1:]
             shuffle(offer_batch)
 
-            for row in offer_batch[:1000]:
+            for row in offer_batch[:500]:
                 offer_link = self.start_urls[0] + row[0] + ";0162-0"
                 partial_smaller_increase = partial(self.parse_offer, positive_increase=3)
                 yield response.follow(offer_link, callback=partial_smaller_increase)
@@ -378,6 +379,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             pos = partial(self.parse_reviews_page, 
                           positive = True, 
                           limit = limit, 
+                          scraped_this_mode = scraped_this_mode + scraped_this_round,
                           all_negatives_scraped = all_negatives_scraped, 
                           neutral = True, 
                           positive_increase = positive_increase, 
@@ -390,7 +392,8 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             # Continue Scraping positive reviews on the next page.
             pos = partial(self.parse_reviews_page, 
                           positive=True, 
-                          limit = limit, 
+                          limit = limit,
+                          scraped_this_mode = scraped_this_mode + scraped_this_round,
                           all_negatives_scraped = all_negatives_scraped, 
                           positive_increase = positive_increase, 
                           review_percentage = review_percentage)
@@ -401,7 +404,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             
             # Continue scraping negative reviews on the next page.
             neg = partial(self.parse_reviews_page, 
-                          positive=False, 
+                          positive=False,
                           scraped_this_mode = scraped_this_mode + scraped_this_round, 
                           positive_increase = positive_increase, 
                           review_percentage = review_percentage)
@@ -431,7 +434,8 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             # When negative cases have finished. Start scraping positive reviews.
             pos = partial(self.parse_reviews_page, 
                           positive=True, 
-                          limit = scraped_this_mode + scraped_this_round + positive_increase, 
+                          limit = scraped_this_mode + scraped_this_round + positive_increase,
+                          all_negatives_scraped = scraped_this_mode + scraped_this_round + positive_increase,
                           positive_increase = positive_increase, 
                           review_percentage = review_percentage)
         
@@ -444,8 +448,9 @@ class CeneoReviewScraperSpider(scrapy.Spider):
 
             # When neutral cases have finished. Start scraping positive reviews.
             pos = partial(self.parse_reviews_page, 
-                          positive=True, 
-                          limit = all_negatives_scraped, 
+                          positive=True,
+                          limit = all_negatives_scraped,
+                          all_negatives_scraped = all_negatives_scraped,
                           positive_increase = positive_increase, 
                           review_percentage = review_percentage)
 
