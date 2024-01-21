@@ -12,9 +12,10 @@ from itertools import chain
 
 class CeneoReviewScraperSpider(scrapy.Spider):
 
-    def __init__(self, fill_holes="False", *args, **kwargs):
+    def __init__(self, fill_holes=False, positive_increase="3", *args, **kwargs):
         super(CeneoReviewScraperSpider, self).__init__(*args, **kwargs)
         self.fill_holes = bool(fill_holes)
+        self.positive_increase = int(positive_increase)
         self.offer_refs = set()
         self.entry_ids = set()    
 
@@ -31,13 +32,12 @@ class CeneoReviewScraperSpider(scrapy.Spider):
     # Set current dir as part of Path to easly locate "output.csv" or "supplement.csv"
     os.chdir(os.path.dirname(__file__))
     
-    
+
     def start_requests(self):
 
         # After Initialization Load all previously saved data id's
         # This will assure no duplicates are generated 
         # and no site will needlessly load.
-
         if self.fill_holes:
             # supplement.csv is hard coded, this is a default output name for my program
             # In case of filling holes after errors of default parsing methods.
@@ -48,8 +48,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                 file = open("supplement.csv")
                 olderdata = csv.reader(file)
                 for row in olderdata:
-                    self.entry_ids.add(row[1])
-                    self.offer_refs.add(row[3])
+                    self.entry_ids.add(row[1]) # Limits duplicate reviews
                 
                 file.close()
             
@@ -64,8 +63,8 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                 file = open("output.csv")
                 olderdata = csv.reader(file)
                 for row in olderdata:
-                    self.entry_ids.add(row[1])
-                    self.offer_refs.add(row[3])
+                    self.entry_ids.add(row[1])  # limits duplicate reviews
+                    self.offer_refs.add(row[3])  # limits duplcate requests
                 
                 file.close()
 
@@ -126,7 +125,9 @@ class CeneoReviewScraperSpider(scrapy.Spider):
 
             for row in offer_batch[:1000]:
                 offer_link = self.start_urls[0] + row[0] + ";0162-0"
-                partial_smaller_increase = partial(self.parse_offer, positive_increase=3)
+                partial_smaller_increase = partial(self.parse_offer)
+                partial_smaller_increase.__name__ = "parse_offer"
+
                 yield response.follow(offer_link, callback=partial_smaller_increase)
 
             # for row in offer_batch:
@@ -134,6 +135,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             #     yield response.follow(offer_link, callback=self.extract_review_count)
 
             file.close()
+    
 
 
     def extract_review_count(self, response):
@@ -305,7 +307,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
         return items_list, scraped_this_round
 
 
-    def parse_offer(self, response, positive_increase=8):
+    def parse_offer(self, response):
         """
         Third Parsing Functions. Decides whether enough negative offers are found and follows up to a last scraping function.
         """
@@ -344,7 +346,8 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                               scraped_this_mode=10, 
                               neutral=neutral, 
                               review_percentage=score_dict,
-                              positive_increase = positive_increase)
+                              )
+                neg.__name__ = "parse_reviews_page"
 
                 yield response.follow(self.start_urls[0] + next_page.attrib["href"], callback=neg)
 
@@ -353,11 +356,12 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                 # When negative cases have finished. Start scraping positive reviews.
                 pos = partial(self.parse_reviews_page, 
                               positive=True, 
-                              limit = negatives_scraped + positive_increase, 
-                              all_negatives_scraped = negatives_scraped + positive_increase, 
+                              limit = negatives_scraped + self.positive_increase, 
+                              all_negatives_scraped = negatives_scraped + self.positive_increase, 
                               neutral=neutral, 
                               review_percentage=score_dict,
-                              positive_increase = positive_increase)
+                              )
+                pos.__name__ = "parse_reviews_page"
 
                 if neutral and (score_dict[4] > 0):
                     next_page = sub("(opinie-[0-9]+)*;0162-0", ";0162-0;ocena-4", str(response.request.url))
@@ -395,8 +399,7 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                      scraped_this_mode = 0, 
                      neutral=False, 
                      all_negatives_scraped=0, 
-                     review_percentage=None,
-                     positive_increase=8):
+                     review_percentage=None):
         """
         Fourth Parsing Function. Scrapes reviews from a single page. 
         Then decides whether to continue scraping and what type of reviews to look for next.
@@ -443,9 +446,9 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                           limit = limit, 
                           scraped_this_mode = scraped_this_mode + scraped_this_round,
                           all_negatives_scraped = all_negatives_scraped, 
-                          neutral = True, 
-                          positive_increase = positive_increase, 
+                          neutral = True,
                           review_percentage = review_percentage)
+            pos.__name__ = "parse_reviews_page"
         
             yield response.follow(self.start_urls[0] + next_page, callback=pos)                        
 
@@ -457,8 +460,8 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                           limit = limit,
                           scraped_this_mode = scraped_this_mode + scraped_this_round,
                           all_negatives_scraped = all_negatives_scraped, 
-                          positive_increase = positive_increase, 
                           review_percentage = review_percentage)
+            pos.__name__ = "parse_reviews_page"
         
             yield response.follow(self.start_urls[0] + next_page, callback=pos)                        
 
@@ -468,8 +471,8 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             neg = partial(self.parse_reviews_page, 
                           positive=False,
                           scraped_this_mode = scraped_this_mode + scraped_this_round, 
-                          positive_increase = positive_increase, 
                           review_percentage = review_percentage)
+            neg.__name__ = "parse_reviews_page"
 
             yield response.follow(self.start_urls[0] + next_page, callback=neg)
 
@@ -478,12 +481,12 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             # When negative cases have finished. Start scraping neutral reviews.
             pos = partial(self.parse_reviews_page, 
                           positive=True, 
-                          limit = scraped_this_mode + scraped_this_round + positive_increase, 
+                          limit = scraped_this_mode + scraped_this_round + self.positive_increase, 
                           neutral = True, 
-                          all_negatives_scraped = scraped_this_mode + scraped_this_round + positive_increase, 
-                          positive_increase = positive_increase, 
+                          all_negatives_scraped = scraped_this_mode + scraped_this_round + self.positive_increase, 
                           review_percentage = review_percentage)
-        
+            pos.__name__ = "parse_reviews_page"
+
             next_review_type = ";0162-0;ocena-4" if review_percentage[4] > 0 else ";0162-1;ocena-3"
 
             yield response.follow(sub("(opinie-[0-9]+)*;0162-0", 
@@ -496,10 +499,11 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             # When negative cases have finished. Start scraping positive reviews.
             pos = partial(self.parse_reviews_page, 
                           positive=True, 
-                          limit = scraped_this_mode + scraped_this_round + positive_increase,
-                          all_negatives_scraped = scraped_this_mode + scraped_this_round + positive_increase,
-                          positive_increase = positive_increase, 
+                          limit = scraped_this_mode + scraped_this_round + self.positive_increase,
+                          all_negatives_scraped = scraped_this_mode + scraped_this_round + self.positive_increase,
                           review_percentage = review_percentage)
+            
+            pos.__name__ = "parse_reviews_page"
         
             yield response.follow(sub("(opinie-[0-9]+)*;0162-0", 
                                       ";0162-1", 
@@ -513,8 +517,10 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                           positive=True,
                           limit = all_negatives_scraped,
                           all_negatives_scraped = all_negatives_scraped,
-                          positive_increase = positive_increase, 
                           review_percentage = review_percentage)
+            
+            pos.__name__ = "parse_reviews_page"
+
 
             yield response.follow(sub("(opinie-[0-9]+)*;0162-[0-1].*", 
                                       ";0162-1", 
