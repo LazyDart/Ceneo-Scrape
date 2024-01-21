@@ -11,6 +11,14 @@ from random import shuffle
 from itertools import chain
 
 class CeneoReviewScraperSpider(scrapy.Spider):
+
+    def __init__(self, fill_holes="False", *args, **kwargs):
+        super(CeneoReviewScraperSpider, self).__init__(*args, **kwargs)
+        self.fill_holes = bool(fill_holes)
+        self.offer_refs = set()
+        self.entry_ids = set()    
+
+
     name = "ceneocatselect"
     allowed_domains = ["www.ceneo.pl"]
     start_urls = ["https://www.ceneo.pl/"]
@@ -19,70 +27,91 @@ class CeneoReviewScraperSpider(scrapy.Spider):
                        'DUPEFILTER_CLASS': 'scrapy.dupefilters.BaseDupeFilter',
                        'DOWNLOAD_DELAY': .5}
 
-    # TODO MAKE IT MORE CLASS Like??
-    # After Initialization Load all previously saved data id's
-    # This will assure no duplicates are generated 
-    # and no site will needlessly load.
-    offer_refs = set()
-    entry_ids = set()    
-
-    # Set current dir as part of Path to easly locate "output.csv"
+    
+    # Set current dir as part of Path to easly locate "output.csv" or "supplement.csv"
     os.chdir(os.path.dirname(__file__))
+    
+    
+    def start_requests(self):
 
-    # output.csv is hard coded, this is a default output name for my programm.
-    # If it is found, offer_refs and entry_ids are populated with data.
-    # if "output.csv" in os.listdir("./"):
+        # After Initialization Load all previously saved data id's
+        # This will assure no duplicates are generated 
+        # and no site will needlessly load.
+
+        if self.fill_holes:
+            # supplement.csv is hard coded, this is a default output name for my program
+            # In case of filling holes after errors of default parsing methods.
+            # If it is found, offer_refs and entry_ids are populated with data.
+            if "supplement.csv" in os.listdir("./"):
+                
+                # Data is Read using csv library.
+                file = open("supplement.csv")
+                olderdata = csv.reader(file)
+                for row in olderdata:
+                    self.entry_ids.add(row[1])
+                    self.offer_refs.add(row[3])
+                
+                file.close()
+            
+            yield scrapy.Request(url=self.start_urls[0], callback=self.start_fill_hole_parsing)
         
-    #     # Data is Read using csv library.
-    #     file = open("output.csv")
-    #     olderdata = csv.reader(file)
-    #     for row in olderdata:
-    #         entry_ids.add(row[1])
-    #         offer_refs.add(row[3])
+        else:
+            # output.csv is hard coded, this is a default output name for my programm.
+            # If it is found, offer_refs and entry_ids are populated with data.
+            if "output.csv" in os.listdir("./"):
+                
+                # Data is Read using csv library.
+                file = open("output.csv")
+                olderdata = csv.reader(file)
+                for row in olderdata:
+                    self.entry_ids.add(row[1])
+                    self.offer_refs.add(row[3])
+                
+                file.close()
+
+            yield scrapy.Request(url=self.start_urls[0], callback=self.start_default_parsing)
+
+
+    def start_default_parsing(self, response):
+        """
+        First Parsing Function
+
+        Loads Ceneo Home-page and reads "most popular categories" link.
+        Then opens link to each of those categories.
+        TODO: Maybe an option exists to browse all categories. Not only popular ones.
+        """
         
-    #     file.close()
-
-
-    # def parse(self, response):
-    #     """
-    #     First Parsing Function
-
-    #     Loads Ceneo Home-page and reads "most popular categories" link.
-    #     Then opens link to each of those categories.
-    #     TODO: Maybe an option exists to browse all categories. Not only popular ones.
-    #     """
+        # Get All categories sub menus
+        sub_menus = response.css("div.js_cat-menu-item.cat-menu-item")
         
-    #     # Get All categories sub menus
-    #     sub_menus = response.css("div.js_cat-menu-item.cat-menu-item")
-        
-    #     # For each menu excluding jewelry, fashion and erotic get all sub-categories
-    #     sub_menus = [menu for menu in sub_menus 
-    #                  if menu.css("a.cat-menu-item__link") 
-    #                     and (menu.css("a.cat-menu-item__link").attrib["href"] not in [r"/Bizuteria_i_zegarki",
-    #                                                                                   r"/Moda",
-    #                                                                                   r"/Erotyka"])
-    #     ]
+        # For each menu excluding jewelry, fashion and erotic get all sub-categories
+        sub_menus = [menu for menu in sub_menus 
+                     if menu.css("a.cat-menu-item__link") 
+                        and (menu.css("a.cat-menu-item__link").attrib["href"] not in [r"/Bizuteria_i_zegarki",
+                                                                                      r"/Moda",
+                                                                                      r"/Erotyka"])
+        ]
 
-    #     # Get links to all sub-categories
-    #     category_links = [menu.css(".pop-cat-item::attr(href)").getall() for menu in sub_menus if menu.css(".pop-cat-item")]
+        # Get links to all sub-categories
+        category_links = [menu.css(".pop-cat-item::attr(href)").getall() for menu in sub_menus if menu.css(".pop-cat-item")]
 
-    #     # join list of lists
-    #     category_links = list(chain.from_iterable(category_links))
+        # join list of lists
+        category_links = list(chain.from_iterable(category_links))
 
-    #     shuffle(category_links)
+        shuffle(category_links)
 
-    #     # for i in range(0, len(category_links)):
-    #     for category_link in category_links: 
+        # for i in range(0, len(category_links)):
+        for category_link in category_links: 
 
-    #         # Get full link to a page by concatenating starting url with single category_link. 
-    #         current_category = self.start_urls[0] + category_link#category_links[i]
+            # Get full link to a page by concatenating starting url with single category_link. 
+            current_category = self.start_urls[0] + category_link#category_links[i]
 
-    #         # Follow to a Second Parsing Function.
-    #         yield response.follow(current_category, callback=self.parse_category)
+            # Follow to a Second Parsing Function.
+            yield response.follow(current_category, callback=self.parse_category)
 
-    #     pass
+        pass
 
-    def parse(self, response):
+    def start_fill_hole_parsing(self, response):
         if "unfinished offers.csv" in os.listdir("./"):
             os.chdir(os.path.dirname(__file__))
             from .update_unfinished import main
@@ -95,13 +124,42 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             offer_batch = list(olderdata)[1:]
             shuffle(offer_batch)
 
-            for row in offer_batch[:500]:
+            for row in offer_batch[:1000]:
                 offer_link = self.start_urls[0] + row[0] + ";0162-0"
                 partial_smaller_increase = partial(self.parse_offer, positive_increase=3)
                 yield response.follow(offer_link, callback=partial_smaller_increase)
 
+            # for row in offer_batch:
+            #     offer_link = self.start_urls[0] + row[0] + "#tab=reviews_scroll"
+            #     yield response.follow(offer_link, callback=self.extract_review_count)
+
             file.close()
+
+
+    def extract_review_count(self, response):
+        # Get counts of all reviews, by their scores. 2 of these counters exist in website, so take only half of values.
+        score_percents = response.css("div.js_score-popup-filter-link.score-extend__row")
+        score_percents = score_percents[:len(score_percents)//2]
+
+        # Get those values into a dict, divide by 100 to get actual percentage.
+        score_dict = {int(score.css("span.score-extend__number::text").get()):  # Score number
+                      float(score.css("span.score-extend__percent::text").get()[:-1])/100  # Percent of all Reviews
+                      for score in score_percents}
+        
+        offer_data = CeneoscrapeItem()
+        offer_data["offer_ref"] = response.request.url
+    
+        offer_data["entry_id"] = score_dict[1] + score_dict[2]
+        offer_data["review_text"] = score_dict[3]
+        offer_data["score"] = score_dict[4] + score_dict[5]
+        offer_data["entry_date"] = ""
+        offer_data["purchase_date"] = ""
+        offer_data["product_title"] = ""
+        offer_data["full_category"] = ""
+        offer_data["top_category"] = ""
             
+        yield offer_data
+
 
     def parse_category(self, response):
         """
@@ -201,44 +259,48 @@ class CeneoReviewScraperSpider(scrapy.Spider):
             # Only include reviews with score adequate to the type of review. Exclude duplicates.
             if (((positive and neutral and (current_score < 4 and current_score > 2)) or
                 (positive and not neutral and current_score >= 4) 
-                or (not positive and current_score <= 2)) 
-                and (review.attrib["data-entry-id"] not in self.entry_ids)):
+                or (not positive and current_score <= 2))):
 
-                offer_data = CeneoscrapeItem()
+                if review.attrib["data-entry-id"] not in self.entry_ids:
 
-                # Add Review-Specific Data
-                # Offer refname
-                offer_data["offer_ref"] = response.request.url
-            
-                # Entry ID
-                offer_data["entry_id"] = review.attrib["data-entry-id"]
-                self.entry_ids.add(review.attrib["data-entry-id"])
+                    offer_data = CeneoscrapeItem()
 
-
-                # Review Text
-                offer_data["review_text"] = " ".join(review.css("div.user-post__content")[0]
-                                                           .css("div.user-post__text::text")
-                                                           .getall())
-
-                # Score
-                offer_data["score"] = current_score
-
-                # Extract Dates
-                datetimes = reviews.css("div.user-post__content span.user-post__published time")
-
-                offer_data["entry_date"] = datetimes[0].attrib["datetime"]
-                if len(datetimes) > 1:
-                    offer_data["purchase_date"] = datetimes[1].attrib["datetime"]
-                else:
-                    offer_data["purchase_date"] = ""
-
-                # Add offer specific data.
-                offer_data["product_title"] = product_title
-                offer_data["full_category"] = full_product_category
-                offer_data["top_category"] = top_product_category
+                    # Add Review-Specific Data
+                    # Offer refname
+                    offer_data["offer_ref"] = response.request.url
                 
-                scraped_this_round += 1
-                items_list.append(offer_data)
+                    # Entry ID
+                    offer_data["entry_id"] = review.attrib["data-entry-id"]
+                    self.entry_ids.add(review.attrib["data-entry-id"])
+
+
+                    # Review Text
+                    offer_data["review_text"] = " ".join(review.css("div.user-post__content")[0]
+                                                            .css("div.user-post__text::text")
+                                                            .getall())
+
+                    # Score
+                    offer_data["score"] = current_score
+
+                    # Extract Dates
+                    datetimes = reviews.css("div.user-post__content span.user-post__published time")
+
+                    offer_data["entry_date"] = datetimes[0].attrib["datetime"]
+                    if len(datetimes) > 1:
+                        offer_data["purchase_date"] = datetimes[1].attrib["datetime"]
+                    else:
+                        offer_data["purchase_date"] = ""
+
+                    # Add offer specific data.
+                    offer_data["product_title"] = product_title
+                    offer_data["full_category"] = full_product_category
+                    offer_data["top_category"] = top_product_category
+                    
+                    scraped_this_round += 1
+                    items_list.append(offer_data)
+
+                else:
+                    scraped_this_round += 1
 
         return items_list, scraped_this_round
 
